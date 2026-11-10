@@ -834,6 +834,22 @@ public final class S2ArmLauncherModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
+    /// 存档位置（services/S2A.Services/SaveFolder.cs）：这款游戏文件夹里的 SaveData/，没有就建出来再在访达里打开（打开的是文件夹里面，玩家直接往里放）
+    func openSaveFolder(_ game: GameSummary) {
+        guard !game.location.folder.isEmpty, FileManager.default.fileExists(atPath: game.location.folder) else { explainMissing("s2arm.reveal.folderMissing"); return }
+        let url = URL(fileURLWithPath: game.location.folder).appendingPathComponent("SaveData", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(url)
+    }
+    /// 存档位置里放的存档上次起局没读进来的原因（服务层写在数据根 saves/savedata-problem.txt，读进来后删掉）；没有 = nil
+    func saveFolderProblem(_ game: GameSummary) -> String? {
+        guard !game.location.folder.isEmpty else { return nil }
+        let file = URL(fileURLWithPath: game.location.folder).appendingPathComponent("saves/savedata-problem.txt")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let why = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return why.isEmpty ? nil : why
+    }
+
     /// 「在访达中显示 .ipa」：装机时组装、整个游戏库共用的那份（默认位置根 S2Arm.ipa）；不在 → 提示框说明，不打开空窗口
     func revealIpa(_ path: String) {
         guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else { explainMissing("s2arm.reveal.ipaMissing"); return }

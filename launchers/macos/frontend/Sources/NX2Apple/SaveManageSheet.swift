@@ -82,6 +82,18 @@ struct SaveManageSheet: View {
                 Text(gameName).font(.manrope(14)).foregroundStyle(.secondary).lineLimit(1)
                 Text(t("save.hint")).font(.manrope(12.5)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, 6)
+                // 存档位置 SaveData：原生存档放进去下次起局就用（services SaveFolder.cs）；上次没读进来的原因写在这里
+                Text(t("save.folder.note")).font(.manrope(12.5)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+                if let game, let why = model.saveFolderProblem(game) {
+                    Label { Text(t("save.folder.problem").replacingOccurrences(of: "{0}", with: why)).fixedSize(horizontal: false, vertical: true) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
+                        .font(.manrope(12)).foregroundStyle(LauncherPalette.danger).padding(.top, 4)
+                }
+                if let game {
+                    Button(t("save.folder.open")) { model.openSaveFolder(game) }
+                        .buttonStyle(LauncherSecondaryButtonStyle()).padding(.top, 8)
+                        .accessibilityIdentifier("save.folder.open")
+                }
             }
             .padding(.horizontal, 30).padding(.top, 28).padding(.bottom, 16)
             feedback.padding(.horizontal, 30)

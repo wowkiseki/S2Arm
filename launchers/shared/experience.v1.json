@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "contract": "s2a.experience.v1",
-  "revision": 42,
+  "revision": 43,
   "languages": ["zh-Hans", "en"],
   "source_language": "zh-Hans",
   "note": "四端（Mac / iOS / Android / 鸿蒙）启动器的「一套体验」规格。状态、文案、错误码、任务事件到界面的映射只在这里定义一次；各端只负责画，不另写一套措辞。错误码的「下一步」不在本文件里写第二份：一律指向 pack/jobs/errors.py 的 RECOVERY（口径见 README.md）。口径号 revision 改动规则见 README.md。",
@@ -541,6 +541,9 @@
       {"id": "save.dropHint", "zh-Hans": "也可以把存档文件夹或 zip 直接拖进这个窗口，没玩过的游戏也能导入。", "en": "You can also drag a save folder or zip into this window, even for a game you haven't played yet."},
       {"id": "save.title", "zh-Hans": "存档", "en": "Saves"},
       {"id": "save.hint", "zh-Hans": "先关掉游戏再操作。备份不会改动当前存档；恢复会覆盖当前存档，覆盖前自动留一份。", "en": "Quit the game first. Backing up leaves your current save untouched; restoring replaces it, and a copy of the current save is kept automatically first."},
+      {"id": "save.folder.note", "zh-Hans": "存档位置：这款游戏文件夹里的 SaveData。把原生格式的存档文件夹放进去（主机、JKSV / Checkpoint 等工具导出的，或别的设备上同一位置拷来的都行），下次开始游戏就用它；退出游戏后这里会更新成最新进度，整个文件夹拷到 iPhone 同一位置就能接着玩。", "en": "Save location: the SaveData folder inside this game's folder. Put a save folder in its original format there (exported from a console, JKSV / Checkpoint and similar tools, or copied from the same place on another device) and the game uses it the next time you start. When you quit, it's updated with your latest progress; copy the whole folder to the same place on iPhone to keep playing."},
+      {"id": "save.folder.open", "zh-Hans": "在访达中打开存档位置", "en": "Open Save Location in Finder"},
+      {"id": "save.folder.problem", "zh-Hans": "存档位置里的存档没读进来：{0}。当前存档没有改动。", "en": "The save in the save location wasn't loaded: {0}. Your current save is unchanged."},
       {"id": "save.busy", "zh-Hans": "有别的任务正在进行，等它结束再管理存档。", "en": "Another task is running. Wait for it to finish before managing saves."},
       {"id": "save.stop", "zh-Hans": "停止", "en": "Stop"},
       {"id": "save.done", "zh-Hans": "完成", "en": "Done"},

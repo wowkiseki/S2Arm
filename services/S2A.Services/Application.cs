@@ -142,6 +142,7 @@ namespace S2A.Services
             Result saveResult = ProcessLoaderHelper.EnsureSaveData(device, new ApplicationId(applicationId), nacp);
             if (requireSuccess) saveResult.ThrowIfFailure();
             Saves.Seed(device, applicationId);
+            if (Saves.Dir() == null) SaveFolder.ReadIn(device, applicationId);   // 存档位置 SaveData：玩家放了新存档就读进来（SaveFolder.cs）；测试 / 导入种子局不读
             Native.Mark("服务：存档\0"u8);
 
             // Ryujinx 加载器原本做的显卡侧三步（FileSystemExtensions / ArmProcessContext）：着色器缓存按程序号、GPU 认得客体内存、宿主就绪

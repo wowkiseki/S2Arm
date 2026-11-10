@@ -120,13 +120,16 @@ def runtime_env(c, game, runtime):
     env.pop("S2A_VAMM_LAYOUT", None)
     env.pop("S2A_PATCH_DIR", None)   # 补丁只在出包时读（随包 patch.tsv 在游戏数据目录里，宿主自己找）；玩家导入的在 <S2A_DOCS>/S2A/patches
     save = contained(layout.root_of(c, game["id"]), layout.path(c, game["id"], "saves"))
+    # 存档位置（11-09 维护者）：这款游戏文件夹里的 SaveData/，原生存档格式，放进去下次起局就读、退出时写回（services/S2A.Services/SaveFolder.cs）。
+    #   不叫 Saves：同一文件夹里已有运行层内部的 saves/，APFS / NTFS 不分大小写会撞名；ASCII 名避开非 ASCII 路径的坑
+    save_folder = contained(layout.root_of(c, game["id"]), layout.path(c, game["id"], "SaveData"))
     cache = contained(layout.root_of(c, game["id"]), layout.path(c, game["id"], "shader-cache"))
     docs = contained(c.library, c.library / "temp" / game["id"])
     for p in (save, cache, docs):
         p.mkdir(parents=True, exist_ok=True)
     # S2A_SAVE_DIR is a test/import seed that clears saves at boot; launch() sets it
     # only for a save the player just imported, never for normal play. Persist the Ryujinx data root instead.
-    env.update(S2A_GAME_DATA=str(runtime), S2A_RYU_DATA=str(save), S2A_DOCS=str(docs),
+    env.update(S2A_GAME_DATA=str(runtime), S2A_RYU_DATA=str(save), S2A_DOCS=str(docs), S2A_SAVE_FOLDER=str(save_folder),
                NXGAL_SHADER_CACHE_DIR=str(cache / "shaders"), NXGAL_PSO_DEV_DIR=str(cache / "pso"),
                S2A_MACRO_DUMP=str(cache / "macros"),
                S2A_DOCKED="0" if c.r.get("docked") is False else "1",   # Mac 缺省主机模式（维护者 11-07）；只有请求明说 false 才掌机

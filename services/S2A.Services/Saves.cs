@@ -87,28 +87,39 @@ namespace S2A.Services
                 return;
             }
 
-            HorizonClient hc = device.System.LibHacHorizonManager.RyujinxClient;
-            ApplicationId app = new(programId);
-
+            var sources = new System.Collections.Generic.List<(string kind, string dir)>();
             foreach (string sub in Directory.EnumerateDirectories(root))
             {
                 string kind = Path.GetFileName(sub);
-                Result r;
+                if (kind is "device" or "account") sources.Add((kind, sub));
+                else Red.Report("S2A_SAVE_DIR 下不认识的存档类型目录（只认 device / account；用户号放 user 文件）", sub);
+            }
+            SeedFrom(device, programId, sources);
+        }
 
-                switch (kind)
+        // 种入内核（S2A_SAVE_DIR 与存档位置 SaveData 共用，见 SaveFolder.cs）：每项 (类型, 目录)，目录内容 = 游戏挂载存档后看到的根目录。
+        //   类型 account / device；save = 有账号存档写账号存档，这款只有设备存档就写设备存档（NX2Apple 引擎的 save/ 规矩，存档位置也用它）。
+        //   清空 → 整棵拷入 → 提交；拷入或提交失败抛 InvalidOperationException（本次起局失败，已提交的旧档原样）
+        internal static void SeedFrom(Switch device, ulong programId, System.Collections.Generic.IEnumerable<(string kind, string dir)> sources)
+        {
+            HorizonClient hc = device.System.LibHacHorizonManager.RyujinxClient;
+            ApplicationId app = new(programId);
+
+            foreach ((string kind0, string sub) in sources)
+            {
+                string kind = kind0;
+                Result r;
+                var u = device.System.AccountManager.LastOpenedUser.UserId;
+                // 走 Shim 里有实现的重载（Ncm.ApplicationId + Fs.UserId → MountSaveDataImpl，类型 Account，同 Ryujinx IFileSystemProxy.OpenSaveDataFileSystem 的路子）；
+                //   LibHac.Fs.SaveData 里收 Account.Uid 的两个重载是 throw NotImplementedException（0.21.0-alpha.133），10-20 塞尔达带账号存档起局 S2A_Init 当场失败
+                Result Account() => LibHac.Fs.Shim.SaveData.MountSaveData(hc.Fs, "s2asave"u8, new LibHac.Ncm.ApplicationId(programId), new LibHac.Fs.UserId((ulong)u.High, (ulong)u.Low));
+
+                if (kind == "device") r = hc.Fs.MountDeviceSaveData("s2asave"u8, app);
+                else if (kind == "account") r = Account();
+                else
                 {
-                    case "device":
-                        r = hc.Fs.MountDeviceSaveData("s2asave"u8, app);
-                        break;
-                    case "account":
-                        // 走 Shim 里有实现的重载（Ncm.ApplicationId + Fs.UserId → MountSaveDataImpl，类型 Account，同 Ryujinx IFileSystemProxy.OpenSaveDataFileSystem 的路子）；
-                        //   LibHac.Fs.SaveData 里收 Account.Uid 的两个重载是 throw NotImplementedException（0.21.0-alpha.133），10-20 塞尔达带账号存档起局 S2A_Init 当场失败
-                        var u = device.System.AccountManager.LastOpenedUser.UserId;
-                        r = LibHac.Fs.Shim.SaveData.MountSaveData(hc.Fs, "s2asave"u8, new LibHac.Ncm.ApplicationId(programId), new LibHac.Fs.UserId((ulong)u.High, (ulong)u.Low));
-                        break;
-                    default:
-                        Red.Report("S2A_SAVE_DIR 下不认识的存档类型目录（只认 device / account；用户号放 user 文件）", sub);
-                        continue;
+                    r = Account(); kind = "account";
+                    if (r.IsFailure()) { r = hc.Fs.MountDeviceSaveData("s2asave"u8, app); kind = "device"; }
                 }
 
                 if (r.IsFailure())

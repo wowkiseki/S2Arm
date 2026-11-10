@@ -518,6 +518,9 @@ namespace S2A.Services
                 }
             });
 
+            // 存档位置 SaveData：当前存档写回（SaveFolder.cs）。要在停 Horizon / 关设备之前，读的是存档事务锁里克隆的已提交版本
+            ShutdownStep(mode, "存档位置写回", () => SaveFolder.WriteBack(Host.Device));
+
             if (guestJoined)
             {
                 Host.ShutdownSessionServices(_sessionOwner == null ? null : _sessionOwner.ThrowIfFailed,

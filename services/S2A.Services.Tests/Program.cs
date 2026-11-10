@@ -2578,6 +2578,84 @@ namespace S2A.Services.Tests
 
                     Environment.SetEnvironmentVariable("S2A_SAVE_DIR", null);
                     Directory.Delete(sd, true);
+
+                    // 存档位置 SaveData（11-09，SaveFolder.cs）：识别（规则同 pack/jobs/save_formats.py）、起局读入、退出写回。期望按规则手写
+                    {
+                        string pid = Application.ProgramId.ToString("x16");
+                        string t = Path.Combine(Path.GetTempPath(), $"s2a_savedata_{Environment.ProcessId}");
+                        if (Directory.Exists(t)) Directory.Delete(t, true);
+                        string D(string name, params (string rel, byte[] data)[] files)
+                        {
+                            string d = Path.Combine(t, name);
+                            foreach (var (rel, data) in files) { string f = Path.Combine(d, rel); Directory.CreateDirectory(Path.GetDirectoryName(f)); File.WriteAllBytes(f, data); }
+                            return d;
+                        }
+                        string K(string root, System.Collections.Generic.List<(string kind, string dir)> r, string why) =>
+                            r == null ? $"无（{why}）" : string.Join("+", r.Select(x => x.kind + ":" + (Path.GetRelativePath(root, x.dir) is var rel && rel == "." ? "." : rel)));
+                        var own = new System.Collections.Generic.HashSet<string> { "Saved Games" };
+                        string w;
+                        string sd_a1 = D("a", ("save/x.bin", [1]), ("save_device/y.bin", [2]));
+                        string sd_b1 = D("b", ($"0x{pid} Game/2026-01-01/x.bin", [1]), ($"0x{pid} Game/2026-02-01/x.bin", [2]));
+                        Directory.SetLastWriteTimeUtc(Path.Combine(sd_b1, $"0x{pid} Game", "2026-01-01"), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+                        Directory.SetLastWriteTimeUtc(Path.Combine(sd_b1, $"0x{pid} Game", "2026-02-01"), new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+                        string sd_c1 = D("c", ("JKSV/Game/P1 - 2026.01.01 @ 10.00.00/x.bin", [1]), ("JKSV/Game/P1 - 2026.02.01 @ 10.00.00/x.bin", [2]));
+                        Directory.SetLastWriteTimeUtc(Path.Combine(sd_c1, "JKSV/Game/P1 - 2026.01.01 @ 10.00.00"), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+                        Directory.SetLastWriteTimeUtc(Path.Combine(sd_c1, "JKSV/Game/P1 - 2026.02.01 @ 10.00.00"), new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+                        string sd_r1 = D("r", ("bis/user/save/0000000000000005/0/x.bin", [1]));
+                        byte[] meta = new byte[0x40]; BitConverter.GetBytes(Application.ProgramId).CopyTo(meta, 0); meta[0x20] = 3;
+                        File.WriteAllBytes(Path.Combine(sd_r1, "bis/user/save/0000000000000005/ExtraData0"), meta);
+                        string sd_e1 = D("e", ("0x0100000000001000 Other/2026/x.bin", [1]));
+                        string sd_f1 = D("f", ("MySave/data.bin", [1]));
+                        string sd_g1 = D("g", ("cheats/a.txt", [1]));
+                        string sd_h1 = D("h", ("Saved Games/data.bin", [1]));
+                        string got = string.Join(" / ", new[] { sd_a1, sd_b1, sd_c1, sd_r1, sd_e1, sd_f1, sd_g1, sd_h1 }.Select(d => K(d, SaveFolder.Detect(d, Application.ProgramId, own, out w), w)));
+                        Check("存档位置识别：固定结构 / Checkpoint 取最新 / JKSV 取最新 / Ryujinx / 别款 / 外面套一层 / 金手指 / 游戏自己的顶层目录",
+                            $"save:save+device:save_device / save:0x{pid} Game/2026-02-01 / save:JKSV/Game/P1 - 2026.02.01 @ 10.00.00 / device:bis/user/save/0000000000000005/0 / 无（这是另一款游戏的存档（程序号 0100000000001000）） / save:MySave / 无（放进来的是金手指（cheats），不是存档） / save:.",
+                            got);
+
+                        // 起局读入 → 退出写回：放 save/（账号）+ save_device/（设备）→ 读入后两份存档是放进来的内容；写回后存档位置是固定结构、内容一致；
+                        //   再起局（摘要和写回时一样）不读（当前存档改成 [9] 后仍是 [9]）；局内玩家动过存档位置 → 退出不写回（玩家放的文件还在）
+                        string folder = Path.Combine(t, "SaveData");
+                        string state = Path.Combine(Ryujinx.Common.Configuration.AppDataManager.BaseDirPath, SaveFolder.StateFile);
+                        File.Delete(state);
+                        Environment.SetEnvironmentVariable("S2A_SAVE_FOLDER", folder);
+                        var uidF = Host.Device.System.AccountManager.LastOpenedUser.UserId;
+                        var fuF = new LibHac.Fs.UserId((ulong)uidF.High, (ulong)uidF.Low);
+                        byte[] prog = new byte[3000]; new Random(5).NextBytes(prog);
+                        D("SaveData", ("save/0/progress.sav", prog), ("save_device/dev.dat", [5, 6]));
+                        long redF = Red.Total;
+                        SaveFolder.ReadIn(Host.Device, Application.ProgramId);
+                        byte[] accIn = ReadDeviceSave("/0/progress.sav", fuF), devIn = ReadDeviceSave("/dev.dat");
+                        SaveFolder.WriteBack(Host.Device);
+                        byte[] accOut = File.Exists(Path.Combine(folder, "save/0/progress.sav")) ? File.ReadAllBytes(Path.Combine(folder, "save/0/progress.sav")) : null;
+                        byte[] devOut = File.Exists(Path.Combine(folder, "save_device/dev.dat")) ? File.ReadAllBytes(Path.Combine(folder, "save_device/dev.dat")) : null;
+                        string nine = D("nine", ("dev.dat", [9]));
+                        Saves.SeedFrom(Host.Device, Application.ProgramId, [("device", nine)]);
+                        SaveFolder.ReadIn(Host.Device, Application.ProgramId);
+                        byte[] devKept = ReadDeviceSave("/dev.dat");
+                        File.WriteAllBytes(Path.Combine(folder, "player.bin"), [7]);   // 局内玩家往存档位置里放了东西
+                        SaveFolder.WriteBack(Host.Device);
+                        bool playerKept = File.Exists(Path.Combine(folder, "player.bin"));
+                        byte[] devStill = File.Exists(Path.Combine(folder, "save_device/dev.dat")) ? File.ReadAllBytes(Path.Combine(folder, "save_device/dev.dat")) : null;
+                        Check("存档位置：起局读入 / 退出写回 / 没动不读 / 局内动过不写回",
+                            "账号 3000 字节一致、设备 [5,6]；写回 save/0/progress.sav 一致、save_device/dev.dat [5,6]；再起局设备仍 [9]；玩家文件在、save_device/dev.dat 仍 [5,6]、报红 +0",
+                            $"账号 {(accIn != null && accIn.AsSpan().SequenceEqual(prog) ? "3000 字节一致" : accIn == null ? "缺" : "不一致")}、设备 {(devIn == null ? "缺" : "[" + string.Join(",", devIn) + "]")}；" +
+                            $"写回 save/0/progress.sav {(accOut != null && accOut.AsSpan().SequenceEqual(prog) ? "一致" : accOut == null ? "缺" : "不一致")}、save_device/dev.dat {(devOut == null ? "缺" : "[" + string.Join(",", devOut) + "]")}；" +
+                            $"再起局设备仍 {(devKept == null ? "缺" : "[" + string.Join(",", devKept) + "]")}；玩家文件{(playerKept ? "在" : "不在")}、save_device/dev.dat 仍 {(devStill == null ? "缺" : "[" + string.Join(",", devStill) + "]")}、报红 +{Red.Total - redF}");
+                        // 放进来的认不出（只有金手指）：不读、写原因；退出不写回，玩家放的原样留着（11-09 Mac 实测发现：原先退出时被当前存档盖掉）
+                        Directory.Delete(folder, true);
+                        D("SaveData", ("cheats/a.txt", [1]));
+                        long redK = Red.Total;
+                        SaveFolder.ReadIn(Host.Device, Application.ProgramId);
+                        string problem = File.Exists(Path.Combine(Ryujinx.Common.Configuration.AppDataManager.BaseDirPath, SaveFolder.ProblemFile)) ? File.ReadAllText(Path.Combine(Ryujinx.Common.Configuration.AppDataManager.BaseDirPath, SaveFolder.ProblemFile)) : "无";
+                        SaveFolder.WriteBack(Host.Device);
+                        Check("存档位置：认不出 → 不读、写原因、退出不写回", "原因 放进来的是金手指（cheats），不是存档、cheats/a.txt 还在、没有 save/、报红 +1",
+                            $"原因 {problem}、cheats/a.txt {(File.Exists(Path.Combine(folder, "cheats/a.txt")) ? "还在" : "没了")}、{(Directory.Exists(Path.Combine(folder, "save")) ? "有" : "没有")} save/、报红 +{Red.Total - redK}");
+                        File.Delete(Path.Combine(Ryujinx.Common.Configuration.AppDataManager.BaseDirPath, SaveFolder.ProblemFile));
+                        Environment.SetEnvironmentVariable("S2A_SAVE_FOLDER", null);
+                        File.Delete(state);
+                        Directory.Delete(t, true);
+                    }
                 }
             }
             else
